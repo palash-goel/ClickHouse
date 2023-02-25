@@ -334,6 +334,9 @@ public:
         /// For Collapsing and VersionedCollapsing mode.
         String sign_column;
 
+        /// For Replacing mode. Can be empty for Replacing.
+        String is_deleted_column;
+
         /// For Summing mode. If empty - columns_to_sum is determined automatically.
         Names columns_to_sum;
 
@@ -1298,7 +1301,8 @@ protected:
         const String & new_part_name,
         const DataPartPtr & result_part,
         const DataPartsVector & source_parts,
-        const MergeListEntry * merge_entry);
+        const MergeListEntry * merge_entry,
+        std::shared_ptr<ProfileEvents::Counters::Snapshot> profile_counters);
 
     /// If part is assigned to merge or mutation (possibly replicated)
     /// Should be overridden by children, because they can have different
@@ -1309,7 +1313,7 @@ protected:
     /// Used to receive AlterConversions for part and apply them on fly. This
     /// method has different implementations for replicated and non replicated
     /// MergeTree because they store mutations in different way.
-    virtual MutationCommands getFirstAlterMutationCommandsForPart(const DataPartPtr & part) const = 0;
+    virtual std::map<int64_t, MutationCommands> getAlterMutationCommandsForPart(const DataPartPtr & part) const = 0;
     /// Moves part to specified space, used in ALTER ... MOVE ... queries
     bool movePartsToSpace(const DataPartsVector & parts, SpacePtr space);
 

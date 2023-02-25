@@ -149,6 +149,7 @@ public:
         bool final,
         bool deduplicate,
         const Names & deduplicate_by_columns,
+        bool cleanup,
         ContextPtr query_context) override;
 
     void alter(const AlterCommands & commands, ContextPtr query_context, AlterLockHolder & table_lock_holder) override;
@@ -214,8 +215,6 @@ public:
     /// It's used if not set in engine's arguments while creating a replicated table.
     static String getDefaultReplicaName(const ContextPtr & context_);
 
-    int getMetadataVersion() const { return metadata_version; }
-
     /// Modify a CREATE TABLE query to make a variant which must be written to a backup.
     void adjustCreateQueryForBackup(ASTPtr & create_query) const override;
 
@@ -228,7 +227,7 @@ public:
     /** Remove a specific replica from zookeeper.
      */
     static void dropReplica(zkutil::ZooKeeperPtr zookeeper, const String & zookeeper_path, const String & replica,
-                            Poco::Logger * logger, MergeTreeSettingsPtr table_settings = nullptr);
+                            Poco::Logger * logger, MergeTreeSettingsPtr table_settings = nullptr, std::optional<bool> * has_metadata_out = nullptr);
 
     /// Removes table from ZooKeeper after the last replica was dropped
     static bool removeTableNodesFromZooKeeper(zkutil::ZooKeeperPtr zookeeper, const String & zookeeper_path,
@@ -427,7 +426,6 @@ private:
     std::atomic<bool> shutdown_called {false};
     std::atomic<bool> flush_called {false};
 
-    int metadata_version = 0;
     /// Threads.
 
     /// A task that keeps track of the updates in the logs of all replicas and loads them into the queue.
@@ -504,8 +502,10 @@ private:
 
     /// A part of ALTER: apply metadata changes only (data parts are altered separately).
     /// Must be called under IStorage::lockForAlter() lock.
-    void setTableStructure(const StorageID & table_id, const ContextPtr & local_context,
-                           ColumnsDescription new_columns, const ReplicatedMergeTreeTableMetadata::Diff & metadata_diff);
+    void setTableStructure(
+        const StorageID & table_id, const ContextPtr & local_context,
+        ColumnsDescription new_columns, const ReplicatedMergeTreeTableMetadata::Diff & metadata_diff,
+        int32_t new_metadata_version);
 
     /** Check that the set of parts corresponds to that in ZK (/replicas/me/parts/).
       * If any parts described in ZK are not locally, throw an exception.
@@ -634,6 +634,7 @@ private:
         const MergeTreeDataPartFormat & merged_part_format,
         bool deduplicate,
         const Names & deduplicate_by_columns,
+        bool cleanup,
         ReplicatedMergeTreeLogEntryData * out_log_entry,
         int32_t log_version,
         MergeType merge_type);
@@ -831,7 +832,7 @@ private:
     void waitMutationToFinishOnReplicas(
         const Strings & replicas, const String & mutation_id) const;
 
-    MutationCommands getFirstAlterMutationCommandsForPart(const DataPartPtr & part) const override;
+    std::map<int64_t, MutationCommands> getAlterMutationCommandsForPart(const DataPartPtr & part) const override;
 
     void startBackgroundMovesIfNeeded() override;
 
